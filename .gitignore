@@ -13,3 +13,6 @@ chroma-data/
 Thumbs.db
 
 UPLOAD_DEBUG_GUIDE.md
+
+uploads/*
+!uploads/.gitkeep
