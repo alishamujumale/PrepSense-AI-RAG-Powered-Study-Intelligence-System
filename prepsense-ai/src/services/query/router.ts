@@ -16,6 +16,11 @@ export interface QueryResult {
   pyqRelevance: number
 }
 
+// Squared L2 distance threshold for Nomic's normalized embeddings.
+// Below this = relevant enough to trust; above = treat as no real match.
+// Tune this based on real query behavior once you have more usage data.
+const RELEVANCE_THRESHOLD = 0.7
+
 export async function routeAndAnswer(
   question:  string,
   userId:    string,
@@ -23,45 +28,46 @@ export async function routeAndAnswer(
   profile:   StudentProfile,
   format:    AnswerFormat = 'explain'
 ): Promise<QueryResult> {
-
-  // Step 1 — Check if student has notes in ChromaDB
   const hasNotes = await hasChunks(userId, examId, profile.subject)
-  const mode: 'rag' | 'curriculum' = hasNotes ? 'rag' : 'curriculum'
 
-  console.log(`Query mode: ${mode} | Subject: ${profile.subject} | hasNotes: ${hasNotes}`)
-
-  // Step 2 — Build system prompt
-  const systemPrompt = buildSystemPrompt(profile, format, mode)
-
-  let userMessage: string
+  let mode: 'rag' | 'curriculum' = hasNotes ? 'rag' : 'curriculum'
   let chunksUsed = 0
+  let userMessage: string
 
   if (mode === 'rag') {
-    // Step 3a — Retrieve relevant chunks
-    const chunks = await retrieveChunks(
-      question,
-      userId,
-      examId,
-      profile.subject,
-      5   // top-5 chunks
-    )
-    chunksUsed = chunks.length
-    console.log(`Retrieved ${chunks.length} chunks for query`)
+    const retrieved = await retrieveChunks(question, userId, examId, profile.subject, 5)
 
-    // Step 3b — Build RAG prompt with context
-    userMessage = buildRAGPrompt(question, chunks)
-  } else {
-    // Step 3c — Curriculum mode — no retrieval needed
+    const bestDistance = retrieved.length > 0
+      ? Math.min(...retrieved.map(c => c.distance))
+      : Infinity
+
+    console.log(`Best chunk distance: ${bestDistance.toFixed(3)} (threshold: ${RELEVANCE_THRESHOLD})`)
+
+    if (bestDistance > RELEVANCE_THRESHOLD) {
+      // Nothing retrieved is actually relevant — fall back instead of
+      // falsely claiming "from your notes"
+      console.log('No chunks passed relevance threshold — falling back to curriculum mode')
+      mode = 'curriculum'
+    } else {
+      const relevantChunks = retrieved.filter(c => c.distance <= RELEVANCE_THRESHOLD)
+      chunksUsed = relevantChunks.length
+      userMessage = buildRAGPrompt(question, relevantChunks.map(c => c.text))
+    }
+  }
+
+  if (mode === 'curriculum') {
     userMessage = buildCurriculumPrompt(question)
   }
 
-  // Step 4 — Generate answer with Llama3.2
-  const answer = await generateResponse(systemPrompt, userMessage)
+  const systemPrompt = buildSystemPrompt(profile, format, mode)
+  const answer = await generateResponse(systemPrompt, userMessage!)
+
+  console.log(`Query mode: ${mode} | Subject: ${profile.subject} | chunksUsed: ${chunksUsed}`)
 
   return {
     answer,
     mode,
     chunksUsed,
-    pyqRelevance: 0,   // will be filled in Phase 4 when PYQ analyzer is built
+    pyqRelevance: 0,
   }
 }

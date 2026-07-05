@@ -12,13 +12,11 @@ export async function storeChunks(
     console.log('⚠ No chunks to store — skipping ChromaDB write')
     return
   }
-
   const { collection } = await getCollection(
     metadata.userId,
     metadata.examId,
     metadata.subject
   )
-
   const ids        = chunks.map(() => uuidv4())
   const embeddings = chunks.map(c => c.embedding)
   const documents  = chunks.map(c => c.text)
@@ -30,15 +28,18 @@ export async function storeChunks(
     docType:    metadata.docType,
     chunkIndex: c.chunkIndex,
   }))
-
   await collection.add({
     ids,
     embeddings,
     documents,
     metadatas,
   })
-
   console.log(`✓ Stored ${chunks.length} chunks in ChromaDB`)
+}
+
+export interface RetrievedChunk {
+  text: string
+  distance: number
 }
 
 export async function retrieveChunks(
@@ -47,16 +48,17 @@ export async function retrieveChunks(
   examId: string,
   subject: string,
   topK: number = 5
-): Promise<string[]> {
+): Promise<RetrievedChunk[]> {
   const { collection } = await getCollection(userId, examId, subject)
-
   const queryEmbedding = await generateEmbedding(query)
-
   const results = await collection.query({
     queryEmbeddings: [queryEmbedding],
     nResults: topK,
   })
+  const docs      = results.documents?.[0] ?? []
+  const distances = results.distances?.[0] ?? []
 
-  const docs = results.documents?.[0] ?? []
-  return docs.filter((d): d is string => d !== null)
+  return docs
+    .map((d, i) => ({ text: d, distance: distances[i] }))
+    .filter((c): c is RetrievedChunk => c.text !== null && c.distance !== undefined)
 }
