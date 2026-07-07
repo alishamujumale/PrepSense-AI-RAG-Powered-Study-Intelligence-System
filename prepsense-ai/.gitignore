@@ -39,3 +39,12 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# PrepSense specific
+uploads/*
+!uploads/.gitkeep
+chroma-data/
+*.json.bak
+query.json
+nomic-test.json
+pyq-test.json

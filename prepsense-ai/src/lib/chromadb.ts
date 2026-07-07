@@ -1,13 +1,13 @@
-import { ChromaClient } from 'chromadb'
+import { CloudClient } from 'chromadb'
 
-let client: ChromaClient | null = null
+let client: CloudClient | null = null
 
-export function getChromaClient(): ChromaClient {
+export function getChromaClient(): CloudClient {
   if (!client) {
-    client = new ChromaClient({ 
-      host: 'localhost',
-      port: 8000,
-      ssl: false
+    client = new CloudClient({
+      apiKey:   process.env.CHROMA_API_KEY!,
+      tenant:   process.env.CHROMA_TENANT!,
+      database: process.env.CHROMA_DATABASE!,
     })
   }
   return client
@@ -21,12 +21,10 @@ export async function getCollection(
   const c = getChromaClient()
   const safeSubject = subject.toLowerCase().replace(/\s+/g, '_')
   const collectionName = `u_${userId}_e_${examId}_s_${safeSubject}`
-
   const collection = await c.getOrCreateCollection({
     name: collectionName,
     metadata: { userId, examId, subject },
   })
-
   return { collection, collectionName }
 }
 

@@ -1,12 +1,16 @@
 import Groq from 'groq-sdk'
 
-const GROQ_API_KEY  = process.env.GROQ_API_KEY!
-const NOMIC_API_KEY = process.env.NOMIC_API_KEY!
-const IS_PROD       = process.env.NODE_ENV === 'production'
+const GROQ_API_KEY  = process.env.GROQ_API_KEY
+const NOMIC_API_KEY = process.env.NOMIC_API_KEY
+const OLLAMA_URL    = process.env.OLLAMA_URL
 
 let groqClient: Groq | null = null
 
 export function getLLMClient(): Groq {
+  if (!GROQ_API_KEY) {
+    throw new Error('Set GROQ_API_KEY to use Groq chat completions')
+  }
+
   if (!groqClient) {
     groqClient = new Groq({ apiKey: GROQ_API_KEY })
   }
@@ -34,13 +38,17 @@ export async function generateResponse(
 }
 
 export async function generateEmbedding(text: string): Promise<number[]> {
-  if (IS_PROD || NOMIC_API_KEY) {
-    // Production — use Nomic cloud API
+  if (NOMIC_API_KEY) {
     return await getNomicEmbedding(text)
-  } else {
-    // Local dev fallback — use Ollama
+  }
+
+  if (OLLAMA_URL) {
     return await getOllamaEmbedding(text)
   }
+
+  throw new Error(
+    'No embedding provider configured. Set NOMIC_API_KEY or OLLAMA_URL.'
+  )
 }
 
 async function getNomicEmbedding(text: string): Promise<number[]> {
@@ -68,7 +76,7 @@ async function getNomicEmbedding(text: string): Promise<number[]> {
 async function getOllamaEmbedding(text: string): Promise<number[]> {
   const { Ollama } = await import('ollama')
   const ollama = new Ollama({ 
-    host: process.env.OLLAMA_URL ?? 'http://localhost:11434' 
+    host: OLLAMA_URL ?? 'http://localhost:11434' 
   })
 
   const response = await ollama.embeddings({

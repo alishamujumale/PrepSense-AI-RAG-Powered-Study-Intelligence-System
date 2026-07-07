@@ -1,9 +1,9 @@
 import mongoose from 'mongoose'
 
-const MONGODB_URI = process.env.MONGODB_URI!
+const MONGODB_URI = process.env.MONGODB_URI ?? process.env.MONGO_URI
 
 if (!MONGODB_URI) {
-  throw new Error('MONGODB_URI is not defined in .env.local')
+  throw new Error('Set MONGODB_URI (or MONGO_URI) to your MongoDB Atlas connection string in .env.local')
 }
 
 declare global {
@@ -21,10 +21,16 @@ export async function connectDB(): Promise<typeof mongoose> {
 
   if (!cached.promise) {
     cached.promise = mongoose.connect(MONGODB_URI, {
+      serverSelectionTimeoutMS: 10000,
       bufferCommands: false,
     })
   }
 
-  cached.conn = await cached.promise
-  return cached.conn
+  try {
+    cached.conn = await cached.promise
+    return cached.conn
+  } catch (error) {
+    cached.promise = null
+    throw error
+  }
 }

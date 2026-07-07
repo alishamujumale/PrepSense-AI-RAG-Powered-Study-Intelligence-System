@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 import { connectDB } from '@/lib/mongodb'
 import { getChromaClient } from '@/lib/chromadb'
-import { getLLMClient } from '@/lib/llm'
 
 export async function GET() {
   const status: Record<string, string> = {}
@@ -14,7 +13,7 @@ export async function GET() {
     status.mongo = `error: ${(e as Error).message}`
   }
 
-  // Check ChromaDB
+  // Check Chroma Cloud
   try {
     const client = getChromaClient()
     await client.heartbeat()
@@ -23,22 +22,32 @@ export async function GET() {
     status.chroma = `error: ${(e as Error).message}`
   }
 
-  // Check Ollama
+  // Check Groq (LLM)
   try {
-    const client = getLLMClient()
-    const models = await client.list()
-    const hasLLM   = models.models.some(m => m.name.includes('llama3.2'))
-    const hasEmbed = models.models.some(m => m.name.includes('nomic-embed-text'))
-    status.ollama_llm   = hasLLM   ? 'ok' : 'error: llama3.2 not found — run: ollama pull llama3.2'
-    status.ollama_embed = hasEmbed ? 'ok' : 'error: nomic-embed-text not found — run: ollama pull nomic-embed-text'
+    if (!process.env.GROQ_API_KEY) throw new Error('GROQ_API_KEY not set')
+    status.groq_llm = 'ok'
   } catch (e) {
-    status.ollama_llm   = `error: ${(e as Error).message}`
-    status.ollama_embed = `error: ${(e as Error).message}`
+    status.groq_llm = `error: ${(e as Error).message}`
   }
 
-  // Check env vars
-  const required = ['MONGODB_URI', 'OLLAMA_URL', 'CHROMA_URL']
-  const missing  = required.filter(k => !process.env[k])
+  // Check Nomic (embeddings)
+  try {
+    if (!process.env.NOMIC_API_KEY) throw new Error('NOMIC_API_KEY not set')
+    status.nomic_embed = 'ok'
+  } catch (e) {
+    status.nomic_embed = `error: ${(e as Error).message}`
+  }
+
+  // Check required env vars for production stack
+  const required = [
+    'MONGODB_URI',
+    'GROQ_API_KEY',
+    'NOMIC_API_KEY',
+    'CHROMA_API_KEY',
+    'CHROMA_TENANT',
+    'CHROMA_DATABASE',
+  ]
+  const missing = required.filter(k => !process.env[k])
   status.env = missing.length === 0 ? 'ok' : `missing: ${missing.join(', ')}`
 
   const allOk = Object.values(status).every(v => v === 'ok')
