@@ -66,7 +66,11 @@ export async function POST(req: NextRequest) {
     }
 
     // Save file to disk
-    const uploadDir = path.join(process.cwd(), 'uploads', userIdStr, examIdStr)
+    const baseUploadDir = process.env.VERCEL 
+  ? '/tmp/uploads' 
+  : path.join(process.cwd(), 'uploads')
+
+const uploadDir = path.join(baseUploadDir, userIdStr, examIdStr)
     await mkdir(uploadDir, { recursive: true })
 
     const fileName = `${Date.now()}_${file.name.replace(/\s+/g, '_')}`
